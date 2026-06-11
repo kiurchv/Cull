@@ -208,13 +208,7 @@ fun GalleryScreen(
         if (shouldLoadMore) viewModel.loadNextPage()
     }
 
-    var isRefreshing by remember { mutableStateOf(false) }
-    LaunchedEffect(isRefreshing) {
-        if (isRefreshing) {
-            viewModel.refresh()
-            isRefreshing = false
-        }
-    }
+    val isRefreshing = state.indexingState.status == IndexingStatus.RUNNING
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -248,18 +242,13 @@ fun GalleryScreen(
             )
         }
     ) { padding ->
-        val pullRefreshState = rememberPullRefreshState(isRefreshing, { isRefreshing = true })
+        val pullRefreshState = rememberPullRefreshState(isRefreshing, viewModel::refresh)
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
                 .pullRefresh(pullRefreshState),
         ) {
-            PullRefreshIndicator(
-                refreshing = isRefreshing,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
             when {
                 state.series.isEmpty() && state.indexingState.status == IndexingStatus.RUNNING -> {
                     FirstRunLoader()
@@ -291,6 +280,11 @@ fun GalleryScreen(
                     }
                 }
             }
+            PullRefreshIndicator(
+                refreshing = isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
         }
     }
 }
