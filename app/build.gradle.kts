@@ -62,11 +62,13 @@ detekt {
     config.setFrom(files("$rootDir/config/detekt.yml"))
     buildUponDefaultConfig = true
     autoCorrect = false
+    source.setFrom(
+        fileTree("src/main/java") { include("**/*.kt") },
+        fileTree("src/test/java") { include("**/*.kt") },
+    )
 }
 
 tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-    include("**/*.kt")
-    exclude("**/build/**")
     reports {
         html.required.set(true)
         xml.required.set(true)
