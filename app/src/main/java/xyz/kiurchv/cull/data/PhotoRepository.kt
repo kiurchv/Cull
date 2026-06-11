@@ -77,6 +77,66 @@ class PhotoRepository @Inject constructor(
 
     // ---- Favorites ----
 
+    /**
+     * Batch-load all display fields for a list of mediaIds — one MediaStore query.
+     * Returns map of mediaId -> MediaStoreData.
+     */
+    data class MediaStoreData(
+        val path: String,
+        val displayName: String,
+        val width: Int,
+        val height: Int,
+        val size: Long,
+        val mimeType: String,
+        val isFavorite: Boolean,
+    )
+
+    suspend fun loadMediaStoreData(mediaIds: List<Long>): Map<Long, MediaStoreData> =
+        withContext(Dispatchers.IO) {
+            if (mediaIds.isEmpty()) return@withContext emptyMap()
+            val result = mutableMapOf<Long, MediaStoreData>()
+            val projection = arrayOf(
+                MediaStore.Images.Media._ID,
+                MediaStore.Images.Media.DATA,
+                MediaStore.Images.Media.DISPLAY_NAME,
+                MediaStore.Images.Media.WIDTH,
+                MediaStore.Images.Media.HEIGHT,
+                MediaStore.Images.Media.SIZE,
+                MediaStore.Images.Media.MIME_TYPE,
+                MediaStore.Images.Media.IS_FAVORITE,
+            )
+            val placeholders = mediaIds.joinToString(",") { "?" }
+            val selection = "${MediaStore.Images.Media._ID} IN ($placeholders)"
+            val selectionArgs = mediaIds.map { it.toString() }.toTypedArray()
+
+            resolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection, selection, selectionArgs, null
+            )?.use { cursor ->
+                val idCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+                val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DATA)
+                val nameCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.DISPLAY_NAME)
+                val widthCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.WIDTH)
+                val heightCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.HEIGHT)
+                val sizeCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.SIZE)
+                val mimeCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.MIME_TYPE)
+                val favCol = cursor.getColumnIndexOrThrow(MediaStore.Images.Media.IS_FAVORITE)
+                while (cursor.moveToNext()) {
+                    val id = cursor.getLong(idCol)
+                    result[id] = MediaStoreData(
+                        path = cursor.getString(dataCol) ?: "",
+                        displayName = cursor.getString(nameCol) ?: "",
+                        width = cursor.getInt(widthCol),
+                        height = cursor.getInt(heightCol),
+                        size = cursor.getLong(sizeCol),
+                        mimeType = cursor.getString(mimeCol) ?: "image/jpeg",
+                        isFavorite = cursor.getInt(favCol) == 1,
+                    )
+                }
+            }
+            result
+        }
+
     private fun readExifLatLon(path: String): Pair<Double?, Double?> = try {
         val exif = androidx.exifinterface.media.ExifInterface(path)
         val latLon = FloatArray(2)

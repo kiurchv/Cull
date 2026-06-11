@@ -53,6 +53,7 @@ class SeriesViewModel @Inject constructor(
     private val seriesDao: SeriesDao,
     private val photoHashDao: PhotoHashDao,
     private val groupingEngine: GroupingEngine,
+    private val photoRepository: xyz.kiurchv.cull.data.PhotoRepository,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SeriesUiState())
@@ -64,10 +65,13 @@ class SeriesViewModel @Inject constructor(
         viewModelScope.launch {
             val series = seriesDao.getById(seriesId) ?: return@launch
             photoMetadataDao.observeBySeriesId(seriesId).collect { metaList ->
-                val hashMap = photoHashDao.getByIds(metaList.map { it.mediaId })
+                val ids = metaList.map { it.mediaId }
+                val hashMap = photoHashDao.getByIds(ids)
                     .associate { it.mediaId to (it.pHash to it.sharpness) }
+                val msData = photoRepository.loadMediaStoreData(ids)
 
-                val photos = metaList.map { meta ->
+                val photos = metaList.mapNotNull { meta ->
+                    val ms = msData[meta.mediaId] ?: return@mapNotNull null
                     val (_, sharpness) = hashMap[meta.mediaId] ?: (0L to 0f)
                     Photo(
                         id = meta.mediaId,
@@ -75,14 +79,14 @@ class SeriesViewModel @Inject constructor(
                             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
                             meta.mediaId.toString()
                         ),
-                        path = "",
-                        displayName = "",
+                        path = ms.path,
+                        displayName = ms.displayName,
                         dateTaken = meta.dateTaken,
-                        width = 0,
-                        height = 0,
-                        size = 0,
-                        mimeType = "image/jpeg",
-                        isFavorite = false,
+                        width = ms.width,
+                        height = ms.height,
+                        size = ms.size,
+                        mimeType = ms.mimeType,
+                        isFavorite = ms.isFavorite,
                         sharpness = sharpness,
                         pendingDelete = meta.pendingDelete,
                         seriesId = meta.seriesId,
@@ -283,17 +287,19 @@ private fun BatchRow(
                     uri = photo.uri,
                     isSelected = photo.id in selectedIds,
                     isPendingDelete = photo.pendingDelete,
+                    isFavorite = photo.isFavorite,
                     badge = null,
                     onClick = { onPhotoClick(photo.id) },
                     onLongClick = { onPhotoLongClick(photo.id) },
                 )
             }
             // Duplicate groups — one cell per group showing best photo
-            items(batch.duplicateGroups, key = { "grp_${it.id}" }) { group ->
+            items(batch.duplicateGroups, key = { "grp_\${it.id}" }) { group ->
                 PhotoCell(
                     uri = group.best.uri,
                     isSelected = group.photos.any { it.id in selectedIds },
                     isPendingDelete = group.photos.any { it.pendingDelete },
+                    isFavorite = group.best.isFavorite,
                     badge = PhotoCellBadge.Duplicate(group.photos.size),
                     onClick = { onDuplicateGroupClick(group.id) },
                     onLongClick = { onPhotoLongClick(group.best.id) },
@@ -314,6 +320,7 @@ fun PhotoCell(
     uri: android.net.Uri,
     isSelected: Boolean,
     isPendingDelete: Boolean,
+    isFavorite: Boolean = false,
     badge: PhotoCellBadge?,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
@@ -347,6 +354,19 @@ fun PhotoCell(
                 contentDescription = null,
                 tint = Color.White,
                 modifier = Modifier.align(Alignment.Center).size(24.dp),
+            )
+        }
+
+        // Favorite icon
+        if (isFavorite && !isPendingDelete) {
+            Icon(
+                Icons.Default.Favorite,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(4.dp)
+                    .size(16.dp),
             )
         }
 
