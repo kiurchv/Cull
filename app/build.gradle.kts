@@ -1,3 +1,5 @@
+import io.gitlab.arturbosch.detekt.Detekt
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -59,11 +61,11 @@ android {
 detekt {
     config.setFrom(files("$rootDir/config/detekt.yml"))
     buildUponDefaultConfig = true
-    autoCorrect = false  // Don't silently fix — report issues for CI visibility
-    source.setFrom(
-        "src/main/java",
-        "src/test/java",
-    )
+    autoCorrect = false
+}
+
+tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
+    source.setFrom("src/main/java", "src/test/java")
     reports {
         html.required.set(true)
         xml.required.set(true)
