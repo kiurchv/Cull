@@ -27,6 +27,7 @@ import xyz.kiurchv.cull.ui.albums.AlbumsScreen
 import xyz.kiurchv.cull.ui.gallery.GalleryScreen
 import xyz.kiurchv.cull.ui.series.SeriesScreen
 import xyz.kiurchv.cull.ui.duplicates.DuplicateGroupScreen
+import xyz.kiurchv.cull.ui.trash.TrashReviewScreen
 import xyz.kiurchv.cull.ui.viewer.PhotoViewerScreen
 import xyz.kiurchv.cull.ui.settings.SettingsScreen
 import xyz.kiurchv.cull.worker.IndexingWorker
@@ -82,6 +83,9 @@ private object Routes {
     const val SERIES = "series/{seriesId}"
     const val VIEWER = "viewer/{mediaIds}/{startId}"
     const val DUPLICATE_GROUP = "duplicates/{groupId}"
+    const val TRASH_REVIEW = "trash/{seriesId}"
+    const val TRASH_REVIEW_ALL = "trash"
+    fun trashReview(seriesId: String) = "trash/$seriesId"
     const val ALBUMS = "albums"
     const val SETTINGS = "settings"
     fun series(id: String) = "series/$id"
@@ -124,6 +128,28 @@ private fun CullApp() {
                         },
                         onDuplicateGroupClick = { groupId ->
                             navController.navigate(Routes.duplicateGroup(groupId))
+                        },
+                        onTrashReviewClick = {
+                            navController.navigate(Routes.trashReview(seriesId))
+                        },
+                    )
+                }
+                composable(Routes.TRASH_REVIEW_ALL) {
+                    TrashReviewScreen(
+                        seriesId = null,
+                        onBack = { navController.popBackStack() },
+                        onPhotoClick = { mediaId, allIds ->
+                            navController.navigate(Routes.viewer(allIds, mediaId))
+                        },
+                    )
+                }
+                composable(Routes.TRASH_REVIEW) { backStack ->
+                    val seriesId = backStack.arguments?.getString("seriesId")
+                    TrashReviewScreen(
+                        seriesId = seriesId,
+                        onBack = { navController.popBackStack() },
+                        onPhotoClick = { mediaId, allIds ->
+                            navController.navigate(Routes.viewer(allIds, mediaId))
                         },
                     )
                 }
