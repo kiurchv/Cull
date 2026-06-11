@@ -65,7 +65,7 @@ detekt {
 }
 
 tasks.withType<io.gitlab.arturbosch.detekt.Detekt>().configureEach {
-    source.setFrom("src/main/java", "src/test/java")
+    setSource("src/main/java", "src/test/java")
     reports {
         html.required.set(true)
         xml.required.set(true)
