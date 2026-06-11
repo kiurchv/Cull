@@ -62,7 +62,7 @@ jobs:
           retention-days: 7
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace 2>&1
+        run: ./gradlew assembleDebug --stacktrace --rerun-tasks 2>&1
 
       - name: Print Gradle build results
         if: failure()
