@@ -54,7 +54,16 @@ jobs:
           retention-days: 7
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace 2>&1
+
+      - name: Print Gradle build results
+        if: failure()
+        run: |
+          echo "=== Gradle build results ==="
+          find /home/runner/work/_temp/.gradle-actions/build-results/ -name "*.json" \
+            -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null || echo "No build results found"
+          echo "=== Gradle reports ==="
+          find app/build/reports -name "*.txt" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null | head -200
 
       - name: Upload Gradle build results
         if: failure()
