@@ -25,10 +25,12 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.14.5"
-          cache-read-only: false
+
+      - name: Generate Gradle Wrapper
+        run: gradle wrapper --gradle-version=8.14.5
 
       - name: Detekt
-        run: gradle detekt
+        run: ./gradlew detekt
         continue-on-error: true
 
       - name: Upload Detekt report
@@ -40,7 +42,7 @@ jobs:
           retention-days: 7
 
       - name: Android Lint
-        run: gradle lint
+        run: ./gradlew lint
         continue-on-error: true
 
       - name: Upload Lint report
@@ -52,7 +54,7 @@ jobs:
           retention-days: 7
 
       - name: Build debug APK
-        run: gradle assembleDebug --stacktrace
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -66,7 +68,7 @@ jobs:
 
       - name: Build release APK
         run: |
-          gradle assembleRelease \
+          ./gradlew assembleRelease \
             -Pandroid.injected.signing.store.file=$PWD/keystore.p12 \
             -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
