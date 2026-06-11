@@ -20,13 +20,15 @@ jobs:
         with:
           java-version: '17'
           distribution: 'temurin'
-          cache: gradle
 
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.14.5"
+          cache-read-only: false
 
       - name: Detekt
-        run: ./gradlew detekt
+        run: gradle detekt
         continue-on-error: true
 
       - name: Upload Detekt report
@@ -38,7 +40,7 @@ jobs:
           retention-days: 7
 
       - name: Android Lint
-        run: ./gradlew lint
+        run: gradle lint
         continue-on-error: true
 
       - name: Upload Lint report
@@ -50,7 +52,7 @@ jobs:
           retention-days: 7
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: gradle assembleDebug --stacktrace
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
@@ -64,7 +66,7 @@ jobs:
 
       - name: Build release APK
         run: |
-          ./gradlew assembleRelease \
+          gradle assembleRelease \
             -Pandroid.injected.signing.store.file=$PWD/keystore.p12 \
             -Pandroid.injected.signing.store.password=${{ secrets.STORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ secrets.KEY_ALIAS }} \
