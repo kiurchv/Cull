@@ -27,7 +27,6 @@ import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.navigation.NavController
 import androidx.room.Room
 import xyz.kiurchv.cull.data.MediaStoreRepository
 import xyz.kiurchv.cull.data.db.AlbumDao

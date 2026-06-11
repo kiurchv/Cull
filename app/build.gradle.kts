@@ -40,7 +40,6 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
-        freeCompilerArgs += listOf("-Xexplicit-api=warning")
     }
 
     buildFeatures {
