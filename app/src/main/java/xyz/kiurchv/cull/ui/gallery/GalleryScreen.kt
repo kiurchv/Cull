@@ -11,6 +11,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material.pullrefresh.PullRefreshIndicator
+import androidx.compose.material.pullrefresh.pullRefresh
+import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -244,11 +247,18 @@ fun GalleryScreen(
             )
         }
     ) { padding ->
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = { isRefreshing = true },
-            modifier = Modifier.fillMaxSize().padding(padding),
+        val pullRefreshState = rememberPullRefreshState(isRefreshing, { isRefreshing = true })
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .pullRefresh(pullRefreshState),
         ) {
+            PullRefreshIndicator(
+                refreshing = isRefreshing,
+                state = pullRefreshState,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
             when {
                 state.series.isEmpty() && state.indexingState.status == IndexingStatus.RUNNING -> {
                     FirstRunLoader()
