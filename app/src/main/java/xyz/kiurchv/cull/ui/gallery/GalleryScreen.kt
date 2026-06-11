@@ -11,10 +11,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material.ExperimentalMaterialApi
-import androidx.compose.material.pullrefresh.PullRefreshIndicator
-import androidx.compose.material.pullrefresh.pullRefresh
-import androidx.compose.material.pullrefresh.rememberPullRefreshState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -172,7 +168,7 @@ class GalleryViewModel @Inject constructor(
 
 // ---- Screen ----
 
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterialApi::class)
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryScreen(
     onSeriesClick: (series: Series) -> Unit,
@@ -208,7 +204,6 @@ fun GalleryScreen(
         if (shouldLoadMore) viewModel.loadNextPage()
     }
 
-    val isRefreshing = state.indexingState.status == IndexingStatus.RUNNING
 
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -242,19 +237,17 @@ fun GalleryScreen(
             )
         }
     ) { padding ->
-        val pullRefreshState = rememberPullRefreshState(isRefreshing, viewModel::refresh)
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding)
-                .pullRefresh(pullRefreshState),
+                .padding(padding),
         ) {
             when {
                 state.series.isEmpty() && state.indexingState.status == IndexingStatus.RUNNING -> {
                     FirstRunLoader()
                 }
                 state.series.isEmpty() && !state.isLoadingMore -> {
-                    EmptyState()
+                    EmptyState(onRefresh = viewModel::refresh)
                 }
                 else -> {
                     LazyColumn(
@@ -277,14 +270,23 @@ fun GalleryScreen(
                                 }
                             }
                         }
+                        // Refresh button at bottom of list
+                        item {
+                            Box(
+                                Modifier.fillMaxWidth().padding(16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                OutlinedButton(onClick = viewModel::refresh) {
+                                    Icon(Icons.Default.Refresh, null,
+                                        modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text("Оновити")
+                                }
+                            }
+                        }
                     }
                 }
             }
-            PullRefreshIndicator(
-                refreshing = isRefreshing,
-                state = pullRefreshState,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
         }
     }
 }
@@ -308,15 +310,21 @@ private fun FirstRunLoader() {
 }
 
 @Composable
-private fun EmptyState() {
+private fun EmptyState(onRefresh: () -> Unit = {}) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
             "Фото не знайдено\nДозвольте доступ до фото або потягніть вниз для оновлення",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
-            modifier = Modifier.padding(32.dp),
+            modifier = Modifier.padding(horizontal = 32.dp),
         )
+        Spacer(Modifier.height(16.dp))
+        OutlinedButton(onClick = onRefresh) {
+            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(6.dp))
+            Text("Оновити")
+        }
     }
 }
 
