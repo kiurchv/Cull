@@ -25,6 +25,30 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
+      - name: Detekt
+        run: ./gradlew detekt
+        continue-on-error: true
+
+      - name: Upload Detekt report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: detekt-report
+          path: app/build/reports/detekt/
+          retention-days: 7
+
+      - name: Android Lint
+        run: ./gradlew lint
+        continue-on-error: true
+
+      - name: Upload Lint report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lint-report
+          path: app/build/reports/lint/
+          retention-days: 7
+
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
 
@@ -50,5 +74,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: cull-release
-          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          path: app/build/outputs/apk/release/app-release.apk
           retention-days: 30

@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.detekt)
 }
 
 android {
@@ -39,11 +40,27 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        freeCompilerArgs += listOf("-Xexplicit-api=warning")
     }
 
     buildFeatures {
         compose = true
     }
+
+    lint {
+        abortOnError = false
+        htmlReport = true
+        htmlOutput = file("build/reports/lint/lint-report.html")
+        xmlReport = true
+        xmlOutput = file("build/reports/lint/lint-report.xml")
+        checkDependencies = true
+    }
+}
+
+detekt {
+    config.setFrom(files("$rootDir/config/detekt.yml"))
+    buildUponDefaultConfig = true
+    autoCorrect = true
 }
 
 dependencies {
@@ -88,4 +105,7 @@ dependencies {
     // Lifecycle
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
+
+    // Detekt formatting rules
+    detektPlugins(libs.detekt.formatting)
 }
