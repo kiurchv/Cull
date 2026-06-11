@@ -59,7 +59,16 @@ android {
 detekt {
     config.setFrom(files("$rootDir/config/detekt.yml"))
     buildUponDefaultConfig = true
-    autoCorrect = true
+    autoCorrect = false  // Don't silently fix — report issues for CI visibility
+    source.setFrom(
+        "src/main/java",
+        "src/test/java",
+    )
+    reports {
+        html.required.set(true)
+        xml.required.set(true)
+        sarif.required.set(true)
+    }
 }
 
 dependencies {
