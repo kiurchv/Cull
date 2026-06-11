@@ -1,6 +1,7 @@
 package xyz.kiurchv.cull.ui.review
 
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
@@ -13,20 +14,23 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import coil.compose.AsyncImage
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import xyz.kiurchv.cull.data.MediaStoreRepository
 import xyz.kiurchv.cull.data.HardLinkManager
+import xyz.kiurchv.cull.data.MediaStoreRepository
 import xyz.kiurchv.cull.data.db.AlbumDao
 import xyz.kiurchv.cull.data.model.*
 import javax.inject.Inject
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 // ---- ViewModel ----
 
@@ -39,13 +43,6 @@ data class ReviewUiState(
     val showAlbumPicker: Boolean = false,
     val done: Boolean = false,
 )
-
-sealed interface ReviewAction {
-    data object Trash : ReviewAction
-    data object Keep : ReviewAction
-    data class Favorite(val isFavorite: Boolean) : ReviewAction
-    data class AddToAlbum(val albumName: String) : ReviewAction
-}
 
 @HiltViewModel
 class ReviewViewModel @Inject constructor(
@@ -93,7 +90,6 @@ class ReviewViewModel @Inject constructor(
         val photo = currentPhoto ?: return
         viewModelScope.launch {
             mediaStore.setFavorite(photo.id, !photo.isFavorite)
-            // Refresh current photo state — simplified: just advance
         }
     }
 
@@ -110,26 +106,17 @@ class ReviewViewModel @Inject constructor(
 
     private fun advance() {
         _state.update { s ->
-            val batch = s.batches.getOrNull(s.currentBatchIndex) ?: return@update s.copy(done = true)
+            val batch = s.batches.getOrNull(s.currentBatchIndex)
+                ?: return@update s.copy(done = true)
             val group = batch.groups.getOrNull(s.currentGroupIndex)
 
             when {
-                // Next photo in group (for duplicate review)
                 group != null && s.currentPhotoIndex + 1 < group.photos.size ->
                     s.copy(currentPhotoIndex = s.currentPhotoIndex + 1)
-
-                // Next group in batch
                 s.currentGroupIndex + 1 < batch.groups.size ->
                     s.copy(currentGroupIndex = s.currentGroupIndex + 1, currentPhotoIndex = 0)
-
-                // Next batch
                 s.currentBatchIndex + 1 < s.batches.size ->
-                    s.copy(
-                        currentBatchIndex = s.currentBatchIndex + 1,
-                        currentGroupIndex = 0,
-                        currentPhotoIndex = 0,
-                    )
-
+                    s.copy(currentBatchIndex = s.currentBatchIndex + 1, currentGroupIndex = 0, currentPhotoIndex = 0)
                 else -> s.copy(done = true)
             }
         }
@@ -238,16 +225,13 @@ private fun SwipeablePhoto(
             contentScale = ContentScale.Fit,
             modifier = Modifier
                 .fillMaxSize()
-                .offset(x = animatedOffset.dp)
+                .offset { IntOffset(animatedOffset.roundToInt(), 0) }
                 .rotate(rotation),
         )
 
-        // Swipe hint overlays
         if (animatedOffset < -50f) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
+                modifier = Modifier.fillMaxSize().padding(32.dp),
                 contentAlignment = Alignment.CenterStart,
             ) {
                 Icon(
@@ -260,9 +244,7 @@ private fun SwipeablePhoto(
         }
         if (animatedOffset > 50f) {
             Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(32.dp),
+                modifier = Modifier.fillMaxSize().padding(32.dp),
                 contentAlignment = Alignment.CenterEnd,
             ) {
                 Icon(
@@ -297,7 +279,7 @@ private fun BottomActionBar(
                 Icon(
                     if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     "Улюблене",
-                    tint = if (isFavorite) Color.Red else LocalContentColor.current,
+                    tint = if (isFavorite) Color.Red else MaterialTheme.colorScheme.onSurface,
                 )
             }
             FilledTonalButton(onClick = onKeep) {

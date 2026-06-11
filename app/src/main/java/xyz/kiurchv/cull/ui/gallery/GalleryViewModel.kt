@@ -15,7 +15,6 @@ import javax.inject.Inject
 data class GalleryUiState(
     val series: List<Series> = emptyList(),
     val isLoading: Boolean = true,
-    val indexingProgress: Float? = null,   // null = not indexing, 0..1 = progress
     val settings: GroupingSettings = GroupingSettings(),
 )
 
@@ -31,9 +30,8 @@ class GalleryViewModel @Inject constructor(
 
     init {
         loadPhotos()
-        // Re-group whenever hashes update (indexing worker running in background)
         viewModelScope.launch {
-            hashDao.observeAll().collect { _ -> loadPhotos() }
+            hashDao.observeAll().collect { loadPhotos() }
         }
     }
 
@@ -42,21 +40,13 @@ class GalleryViewModel @Inject constructor(
             _state.update { it.copy(isLoading = true) }
 
             val photos = mediaStore.loadPhotos()
-            val hashes = buildMap {
-                hashDao.getAllIds() // warm-up
-            }
-            // Build hash map from DB
             val hashEntities = hashDao.observeAll().first()
             val hashMap = hashEntities.associate { e ->
                 e.mediaId to (e.pHash to e.sharpness)
             }
 
-            val settings = _state.value.settings
-            val series = groupingEngine.groupSync(photos, settings, hashMap)
-
-            _state.update {
-                it.copy(series = series, isLoading = false)
-            }
+            val series = groupingEngine.groupSync(photos, _state.value.settings, hashMap)
+            _state.update { it.copy(series = series, isLoading = false) }
         }
     }
 
