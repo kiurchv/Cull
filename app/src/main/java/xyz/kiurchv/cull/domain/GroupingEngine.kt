@@ -67,11 +67,11 @@ class GroupingEngine @Inject constructor(
                 val dist = haversineMeters(center.first, center.second, photo.latitude!!, photo.longitude!!)
                 if (dist <= radiusMeters) { cluster += photo; true } else false
             }
-            if (!added) clusters += mutableListOf(photo)
+            if (!added) clusters.add(mutableListOf(photo))
         }
 
         if (withoutGeo.isNotEmpty()) {
-            if (clusters.isEmpty()) clusters += mutableListOf()
+            if (clusters.isEmpty()) clusters.add(mutableListOf())
             clusters[0].addAll(withoutGeo)
         }
 
@@ -95,7 +95,7 @@ class GroupingEngine @Inject constructor(
                     batch += photo; true
                 } else false
             } ?: false
-            if (!added) batches += mutableListOf(photo)
+            if (!added) batches.add(mutableListOf(photo))
         }
 
         return batches.mapIndexed { idx, batchPhotos ->
@@ -130,10 +130,10 @@ class GroupingEngine @Inject constructor(
                 val dist = java.lang.Long.bitCount(photoHash xor groupHash)
                 if (dist <= settings.duplicateHashThreshold) { group += photo; true } else false
             }
-            if (!added) groups += mutableListOf(photo)
+            if (!added) groups.add(mutableListOf(photo))
         }
 
-        withoutHash.forEach { groups += mutableListOf(it) }
+        withoutHash.forEach { groups.add(mutableListOf(it)) }
 
         return groups.mapIndexed { idx, groupPhotos ->
             DuplicateGroup(
