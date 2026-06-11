@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PhotoAlbum
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -13,8 +14,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.hilt.navigation.compose.hiltViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import xyz.kiurchv.cull.data.model.Series
 import java.text.SimpleDateFormat
@@ -23,19 +22,22 @@ import java.util.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GalleryScreen(
+    series: List<Series>,
+    isLoading: Boolean,
     onSeriesClick: (seriesId: String) -> Unit,
     onSettingsClick: () -> Unit,
-    viewModel: GalleryViewModel = hiltViewModel(),
+    onAlbumsClick: () -> Unit,
 ) {
-    val state by viewModel.state.collectAsStateWithLifecycle()
-
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Cull") },
                 actions = {
+                    IconButton(onClick = onAlbumsClick) {
+                        Icon(Icons.Default.PhotoAlbum, contentDescription = "Альбоми")
+                    }
                     IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        Icon(Icons.Default.Settings, contentDescription = "Налаштування")
                     }
                 },
             )
@@ -47,22 +49,16 @@ fun GalleryScreen(
                 .padding(padding)
         ) {
             when {
-                state.isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
-                state.series.isEmpty() -> EmptyState(Modifier.align(Alignment.Center))
-                else -> SeriesList(
-                    series = state.series,
-                    onSeriesClick = onSeriesClick,
-                )
+                isLoading -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                series.isEmpty() -> EmptyState(Modifier.align(Alignment.Center))
+                else -> SeriesList(series = series, onSeriesClick = onSeriesClick)
             }
         }
     }
 }
 
 @Composable
-private fun SeriesList(
-    series: List<Series>,
-    onSeriesClick: (String) -> Unit,
-) {
+private fun SeriesList(series: List<Series>, onSeriesClick: (String) -> Unit) {
     LazyColumn(
         contentPadding = PaddingValues(vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(2.dp),
@@ -86,11 +82,7 @@ private fun SeriesRow(series: Series, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        // Thumbnail
-        Card(
-            modifier = Modifier.size(64.dp),
-            shape = MaterialTheme.shapes.small,
-        ) {
+        Card(modifier = Modifier.size(64.dp), shape = MaterialTheme.shapes.small) {
             firstPhoto?.let {
                 AsyncImage(
                     model = it.uri,
@@ -111,12 +103,9 @@ private fun SeriesRow(series: Series, onClick: () -> Unit) {
             Spacer(Modifier.height(2.dp))
             Text(
                 text = buildString {
-                    append("${series.photoCount} фото")
-                    append(" · ${series.batches.size} серій")
-                    val dupes = series.batches.sumOf { b ->
-                        b.groups.count { it.isDuplicate }
-                    }
-                    if (dupes > 0) append(" · $dupes груп дублікатів")
+                    append("${series.photoCount} фото · ${series.batches.size} батчів")
+                    val dupes = series.batches.sumOf { b -> b.groups.count { it.isDuplicate } }
+                    if (dupes > 0) append(" · $dupes дублікатів")
                 },
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -130,7 +119,6 @@ private fun SeriesRow(series: Series, onClick: () -> Unit) {
             }
         }
 
-        // Duplicate badge
         val dupeCount = series.batches.sumOf { b -> b.groups.count { it.isDuplicate } }
         if (dupeCount > 0) {
             Badge { Text("$dupeCount") }
