@@ -45,6 +45,8 @@ data class SeriesUiState(
     val isLoading: Boolean = true,
     val selectedIds: Set<Long> = emptySet(),
     val isSelecting: Boolean = false,
+    val showAlbumPicker: Boolean = false,
+    val albumPickerTargetIds: List<Long> = emptyList(),
 )
 
 @HiltViewModel
@@ -54,6 +56,8 @@ class SeriesViewModel @Inject constructor(
     private val photoHashDao: PhotoHashDao,
     private val groupingEngine: GroupingEngine,
     private val photoRepository: xyz.kiurchv.cull.data.PhotoRepository,
+    private val hardLinkManager: xyz.kiurchv.cull.data.HardLinkManager,
+    private val albumDao: xyz.kiurchv.cull.data.db.AlbumDao,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(SeriesUiState())
@@ -123,6 +127,38 @@ class SeriesViewModel @Inject constructor(
     fun clearSelection() {
         _state.update { it.copy(selectedIds = emptySet(), isSelecting = false) }
     }
+
+    fun showAlbumPicker(targetIds: List<Long>) {
+        _state.update { it.copy(showAlbumPicker = true, albumPickerTargetIds = targetIds) }
+    }
+
+    fun hideAlbumPicker() {
+        _state.update { it.copy(showAlbumPicker = false, albumPickerTargetIds = emptyList()) }
+    }
+
+    fun observeAlbums() = albumDao.observeAll()
+
+    fun addToAlbum(albumName: String) {
+        val ids = _state.value.albumPickerTargetIds
+        hideAlbumPicker()
+        viewModelScope.launch {
+            ids.forEach { mediaId ->
+                val photo = allPhotos().firstOrNull { it.id == mediaId } ?: return@forEach
+                hardLinkManager.addPhotoToAlbum(photo, albumName)
+            }
+            _state.update { it.copy(selectedIds = emptySet(), isSelecting = false) }
+        }
+    }
+
+    fun createAndAddToAlbum(albumName: String) {
+        viewModelScope.launch {
+            hardLinkManager.createAlbum(albumName)
+            addToAlbum(albumName)
+        }
+    }
+
+    private fun allPhotos(): List<xyz.kiurchv.cull.data.model.Photo> =
+        _state.value.batches.flatMap { b -> b.photos + b.duplicateGroups.flatMap { it.photos } }
 }
 
 // ---- Screen ----
@@ -189,6 +225,11 @@ fun SeriesScreen(
                         }
                     }
                     if (state.isSelecting) {
+                        IconButton(onClick = {
+                            viewModel.showAlbumPicker(state.selectedIds.toList())
+                        }) {
+                            Icon(Icons.Default.AddCircleOutline, "До альбому")
+                        }
                         IconButton(onClick = { /* TODO: favorite selected */ }) {
                             Icon(Icons.Default.FavoriteBorder, "Улюблене")
                         }

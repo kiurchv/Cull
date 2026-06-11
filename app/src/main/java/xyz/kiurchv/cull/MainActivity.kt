@@ -23,6 +23,7 @@ import dagger.hilt.components.SingletonComponent
 import androidx.room.Room
 import xyz.kiurchv.cull.data.db.*
 import xyz.kiurchv.cull.ui.PermissionGate
+import xyz.kiurchv.cull.ui.albums.AlbumContentScreen
 import xyz.kiurchv.cull.ui.albums.AlbumsScreen
 import xyz.kiurchv.cull.ui.gallery.GalleryScreen
 import xyz.kiurchv.cull.ui.series.SeriesScreen
@@ -87,6 +88,8 @@ private object Routes {
     const val TRASH_REVIEW_ALL = "trash"
     fun trashReview(seriesId: String) = "trash/$seriesId"
     const val ALBUMS = "albums"
+    const val ALBUM_CONTENT = "album/{albumName}"
+    fun albumContent(name: String) = "album/$name"
     const val SETTINGS = "settings"
     fun series(id: String) = "series/$id"
     fun viewer(mediaIds: List<Long>, startId: Long) =
@@ -174,7 +177,22 @@ private fun CullApp() {
                     )
                 }
                 composable(Routes.ALBUMS) {
-                    AlbumsScreen(onBack = { navController.popBackStack() })
+                    AlbumsScreen(
+                        onBack = { navController.popBackStack() },
+                        onAlbumClick = { name ->
+                            navController.navigate(Routes.albumContent(name))
+                        },
+                    )
+                }
+                composable(Routes.ALBUM_CONTENT) { backStack ->
+                    val albumName = backStack.arguments?.getString("albumName") ?: return@composable
+                    AlbumContentScreen(
+                        albumName = albumName,
+                        onBack = { navController.popBackStack() },
+                        onPhotoClick = { mediaId, allIds ->
+                            navController.navigate(Routes.viewer(allIds, mediaId))
+                        },
+                    )
                 }
                 composable(Routes.SETTINGS) {
                     SettingsScreen(

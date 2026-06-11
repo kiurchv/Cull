@@ -200,6 +200,15 @@ interface AlbumDao {
 
     @Query("DELETE FROM album_links WHERE mediaId = :mediaId")
     suspend fun deleteAllLinksForPhoto(mediaId: Long)
+
+    @Query("SELECT COUNT(*) FROM album_links WHERE albumName = :albumName")
+    suspend fun countPhotosInAlbum(albumName: String): Int
+
+    @Query("SELECT mediaId FROM album_links WHERE albumName = :albumName ORDER BY mediaId DESC")
+    fun observeMediaIdsInAlbum(albumName: String): Flow<List<Long>>
+
+    @Query("SELECT * FROM album_links WHERE albumName = :albumName ORDER BY mediaId DESC")
+    suspend fun getLinksForAlbum(albumName: String): List<AlbumLinkEntity>
 }
 
 // ---------- Database ----------
