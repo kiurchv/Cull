@@ -25,19 +25,17 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.14.5"
+          cache-read-only: false
 
       - name: Generate Gradle Wrapper
         run: gradle wrapper --gradle-version=8.14.5
 
-      - name: Check project structure
+      - name: Verify gradle.properties
         run: |
-          echo "=== Java version ==="
-          java -version
-          echo "=== Gradle version ==="
-          ./gradlew --version
-          echo "=== Project tasks available ==="
-          ./gradlew tasks --group="build" 2>&1 | head -40
-        continue-on-error: true
+          echo "=== gradle.properties ==="
+          cat gradle.properties
+          echo "=== Project root files ==="
+          ls -la
 
       - name: Detekt
         run: ./gradlew detekt --stacktrace 2>&1 | tail -50
