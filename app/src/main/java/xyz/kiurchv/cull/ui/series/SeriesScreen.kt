@@ -312,6 +312,7 @@ private fun BatchRow(
 enum class PhotoCellBadgeType { DUPLICATE, BATCH }
 sealed class PhotoCellBadge {
     data class Duplicate(val count: Int) : PhotoCellBadge()
+    object Best : PhotoCellBadge()
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -378,6 +379,27 @@ fun PhotoCell(
                 tint = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.align(Alignment.TopStart).padding(4.dp).size(20.dp),
             )
+        }
+
+        // Best badge
+        if (badge is PhotoCellBadge.Best) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(4.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        shape = MaterialTheme.shapes.small,
+                    )
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+            ) {
+                Icon(
+                    Icons.Default.Star,
+                    contentDescription = "Найкраще",
+                    modifier = Modifier.size(12.dp),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
         }
 
         // Badge (duplicate count)

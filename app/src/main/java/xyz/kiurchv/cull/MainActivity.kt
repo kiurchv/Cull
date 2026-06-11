@@ -26,6 +26,7 @@ import xyz.kiurchv.cull.ui.PermissionGate
 import xyz.kiurchv.cull.ui.albums.AlbumsScreen
 import xyz.kiurchv.cull.ui.gallery.GalleryScreen
 import xyz.kiurchv.cull.ui.series.SeriesScreen
+import xyz.kiurchv.cull.ui.duplicates.DuplicateGroupScreen
 import xyz.kiurchv.cull.ui.viewer.PhotoViewerScreen
 import xyz.kiurchv.cull.ui.settings.SettingsScreen
 import xyz.kiurchv.cull.worker.IndexingWorker
@@ -80,11 +81,13 @@ private object Routes {
     const val GALLERY = "gallery"
     const val SERIES = "series/{seriesId}"
     const val VIEWER = "viewer/{mediaIds}/{startId}"
+    const val DUPLICATE_GROUP = "duplicates/{groupId}"
     const val ALBUMS = "albums"
     const val SETTINGS = "settings"
     fun series(id: String) = "series/$id"
     fun viewer(mediaIds: List<Long>, startId: Long) =
         "viewer/${mediaIds.joinToString(",")}/\${startId}"
+    fun duplicateGroup(groupId: String) = "duplicates/$groupId"
 }
 
 // ---- MainActivity ----
@@ -115,6 +118,19 @@ private fun CullApp() {
                     val seriesId = backStack.arguments?.getString("seriesId") ?: return@composable
                     SeriesScreen(
                         seriesId = seriesId,
+                        onBack = { navController.popBackStack() },
+                        onPhotoClick = { mediaId, allIds ->
+                            navController.navigate(Routes.viewer(allIds, mediaId))
+                        },
+                        onDuplicateGroupClick = { groupId ->
+                            navController.navigate(Routes.duplicateGroup(groupId))
+                        },
+                    )
+                }
+                composable(Routes.DUPLICATE_GROUP) { backStack ->
+                    val groupId = backStack.arguments?.getString("groupId") ?: return@composable
+                    DuplicateGroupScreen(
+                        groupId = groupId,
                         onBack = { navController.popBackStack() },
                         onPhotoClick = { mediaId, allIds ->
                             navController.navigate(Routes.viewer(allIds, mediaId))
