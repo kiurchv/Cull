@@ -1,6 +1,5 @@
 package xyz.kiurchv.cull.domain
 
-import xyz.kiurchv.cull.data.db.PhotoHashDao
 import xyz.kiurchv.cull.data.model.*
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -10,62 +9,112 @@ data class GroupingSettings(
     val seriesRadiusMeters: Double = 500.0,
     val batchIntervalSeconds: Long = 10L,
     val duplicateHashThreshold: Int = 10,
-)
+) {
+    fun hash(): String = "${seriesRadiusMeters}_${batchIntervalSeconds}_${duplicateHashThreshold}"
+}
 
 @Singleton
-class GroupingEngine @Inject constructor(
-    private val hashDao: PhotoHashDao,
-    private val pHashEngine: PHashEngine,
-) {
-    fun groupSync(
+class GroupingEngine @Inject constructor() {
+
+    /**
+     * Build batches from a pre-sorted (by dateTaken ASC) list of photos belonging to one series.
+     * Called in-memory, no DB access.
+     */
+    fun buildBatches(
         photos: List<Photo>,
         settings: GroupingSettings,
-        hashMap: Map<Long, Pair<Long, Float>>,
-    ): List<Series> {
+    ): List<Batch> {
         if (photos.isEmpty()) return emptyList()
-        return groupIntoSeries(photos, settings, hashMap)
-    }
 
-    // ---- Level 1: Series by geo + date ----
-
-    private fun groupIntoSeries(
-        photos: List<Photo>,
-        settings: GroupingSettings,
-        hashMap: Map<Long, Pair<Long, Float>>,
-    ): List<Series> {
         val sorted = photos.sortedBy { it.dateTaken }
-        val byDay = sorted.groupBy { it.dateTaken / (24 * 60 * 60 * 1000L) }
-        val series = mutableListOf<Series>()
+        val intervalMs = settings.batchIntervalSeconds * 1000L
 
-        byDay.forEach { (dayEpoch, dayPhotos) ->
-            val geoSeries = clusterByGeo(dayPhotos, settings.seriesRadiusMeters)
-            geoSeries.forEachIndexed { idx, cluster ->
-                val center = computeCenter(cluster)
-                val batches = groupIntoBatches(cluster, settings, hashMap)
-                series += Series(
-                    id = "${dayEpoch}_${idx}",
-                    centerLat = center?.first,
-                    centerLon = center?.second,
-                    date = dayEpoch * 24 * 60 * 60 * 1000L,
-                    radiusMeters = settings.seriesRadiusMeters,
-                    batches = batches,
-                )
+        // Split into time-based groups
+        val rawBatches = mutableListOf<MutableList<Photo>>()
+        for (photo in sorted) {
+            val last = rawBatches.lastOrNull()
+            if (last != null && photo.dateTaken - last.last().dateTaken <= intervalMs) {
+                last.add(photo)
+            } else {
+                rawBatches.add(mutableListOf(photo))
             }
         }
 
-        return series.sortedByDescending { it.date }
+        return rawBatches.map { batchPhotos ->
+            val (standalone, grouped) = batchPhotos.partition { it.groupId == null }
+            val duplicateGroups = grouped
+                .groupBy { it.groupId!! }
+                .map { (groupId, groupPhotos) ->
+                    val bestIndex = groupPhotos.indexOfMaxBy { it.sharpness }
+                    DuplicateGroup(
+                        id = groupId,
+                        photos = groupPhotos,
+                        bestIndex = bestIndex.coerceAtLeast(0),
+                    )
+                }
+            Batch(
+                startTime = batchPhotos.first().dateTaken,
+                endTime = batchPhotos.last().dateTaken,
+                photos = standalone,
+                duplicateGroups = duplicateGroups,
+            )
+        }
     }
 
+    /**
+     * Full grouping from scratch — used by GroupingWorker.
+     * Returns: map of mediaId → (seriesId, groupId?)
+     */
+    fun computeAssignments(
+        photos: List<Photo>,
+        settings: GroupingSettings,
+        hashMap: Map<Long, Pair<Long, Float>>, // mediaId → (pHash, sharpness)
+    ): GroupingResult {
+        if (photos.isEmpty()) return GroupingResult(emptyList(), emptyMap())
+
+        val sorted = photos.sortedBy { it.dateTaken }
+        val byDay = sorted.groupBy { it.dateTaken / DAY_MS }
+        val series = mutableListOf<SeriesData>()
+        val assignments = mutableMapOf<Long, Assignment>()
+
+        byDay.forEach { (dayEpoch, dayPhotos) ->
+            val clusters = clusterByGeo(dayPhotos, settings.seriesRadiusMeters)
+            clusters.forEachIndexed { idx, cluster ->
+                val seriesId = "${dayEpoch}_$idx"
+                val center = computeCenter(cluster)
+                val groupAssignments = assignDuplicateGroups(cluster, settings, hashMap, seriesId)
+
+                series.add(SeriesData(
+                    id = seriesId,
+                    date = dayEpoch * DAY_MS,
+                    centerLat = center?.first,
+                    centerLon = center?.second,
+                ))
+
+                cluster.forEach { photo ->
+                    assignments[photo.id] = Assignment(
+                        seriesId = seriesId,
+                        groupId = groupAssignments[photo.id],
+                    )
+                }
+            }
+        }
+
+        return GroupingResult(series, assignments)
+    }
+
+    // ---- Geo clustering ----
+
     private fun clusterByGeo(photos: List<Photo>, radiusMeters: Double): List<List<Photo>> {
-        val withGeo = photos.filter { it.latitude != null && it.longitude != null }
-        val withoutGeo = photos.filter { it.latitude == null || it.longitude == null }
+        val withGeo = photos.filter { it.latitude != null }
+        val withoutGeo = photos.filter { it.latitude == null }
         val clusters = mutableListOf<MutableList<Photo>>()
 
         for (photo in withGeo) {
             val added = clusters.any { cluster ->
                 val center = computeCenter(cluster) ?: return@any false
                 val dist = haversineMeters(center.first, center.second, photo.latitude!!, photo.longitude!!)
-                if (dist <= radiusMeters) { cluster += photo; true } else false
+                if (dist <= radiusMeters) { cluster.add(photo); true } else false
             }
             if (!added) clusters.add(mutableListOf(photo))
         }
@@ -78,49 +127,16 @@ class GroupingEngine @Inject constructor(
         return clusters
     }
 
-    // ---- Level 2: Batches by time ----
+    // ---- Duplicate detection ----
 
-    private fun groupIntoBatches(
+    private fun assignDuplicateGroups(
         photos: List<Photo>,
         settings: GroupingSettings,
         hashMap: Map<Long, Pair<Long, Float>>,
-    ): List<Batch> {
-        val sorted = photos.sortedBy { it.dateTaken }
-        val batches = mutableListOf<MutableList<Photo>>()
-        val intervalMs = settings.batchIntervalSeconds * 1000L
-
-        for (photo in sorted) {
-            val added = batches.lastOrNull()?.let { batch ->
-                if (photo.dateTaken - batch.last().dateTaken <= intervalMs) {
-                    batch += photo; true
-                } else false
-            } ?: false
-            if (!added) batches.add(mutableListOf(photo))
-        }
-
-        return batches.mapIndexed { idx, batchPhotos ->
-            Batch(
-                id = "batch_$idx",
-                startTime = batchPhotos.first().dateTaken,
-                endTime = batchPhotos.last().dateTaken,
-                groups = groupDuplicates(batchPhotos, settings, hashMap),
-            )
-        }
-    }
-
-    // ---- Level 3: Duplicate groups by pHash ----
-
-    private fun groupDuplicates(
-        photos: List<Photo>,
-        settings: GroupingSettings,
-        hashMap: Map<Long, Pair<Long, Float>>,
-    ): List<DuplicateGroup> {
-        if (photos.size == 1) {
-            return listOf(DuplicateGroup(id = photos[0].id.toString(), photos = photos))
-        }
-
+        seriesId: String,
+    ): Map<Long, String> {
+        val result = mutableMapOf<Long, String>()
         val withHash = photos.filter { hashMap.containsKey(it.id) }
-        val withoutHash = photos.filter { !hashMap.containsKey(it.id) }
         val groups = mutableListOf<MutableList<Photo>>()
 
         for (photo in withHash) {
@@ -128,37 +144,23 @@ class GroupingEngine @Inject constructor(
             val added = groups.any { group ->
                 val groupHash = hashMap[group.first().id]?.first ?: return@any false
                 val dist = java.lang.Long.bitCount(photoHash xor groupHash)
-                if (dist <= settings.duplicateHashThreshold) { group += photo; true } else false
+                if (dist <= settings.duplicateHashThreshold) { group.add(photo); true } else false
             }
             if (!added) groups.add(mutableListOf(photo))
         }
 
-        withoutHash.forEach { groups.add(mutableListOf(it)) }
-
-        return groups.mapIndexed { idx, groupPhotos ->
-            DuplicateGroup(
-                id = "group_${idx}_${groupPhotos.first().id}",
-                photos = groupPhotos,
-                bestIndex = findBestPhoto(groupPhotos, hashMap),
-            )
+        groups.filter { it.size > 1 }.forEachIndexed { idx, group ->
+            val groupId = "${seriesId}_g$idx"
+            group.forEach { result[it.id] = groupId }
         }
+
+        return result
     }
 
-    private fun findBestPhoto(photos: List<Photo>, hashMap: Map<Long, Pair<Long, Float>>): Int {
-        if (photos.size == 1) return 0
-        var bestIdx = 0
-        var bestSharpness = -1f
-        photos.forEachIndexed { idx, photo ->
-            val sharpness = hashMap[photo.id]?.second ?: 0f
-            if (sharpness > bestSharpness) { bestSharpness = sharpness; bestIdx = idx }
-        }
-        return bestIdx
-    }
-
-    // ---- Geo helpers ----
+    // ---- Helpers ----
 
     private fun computeCenter(photos: List<Photo>): Pair<Double, Double>? {
-        val withGeo = photos.filter { it.latitude != null && it.longitude != null }
+        val withGeo = photos.filter { it.latitude != null }
         if (withGeo.isEmpty()) return null
         return withGeo.map { it.latitude!! }.average() to withGeo.map { it.longitude!! }.average()
     }
@@ -171,4 +173,37 @@ class GroupingEngine @Inject constructor(
                 cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
         return r * 2 * atan2(sqrt(a), sqrt(1 - a))
     }
+
+    private fun <T> List<T>.indexOfMaxBy(selector: (T) -> Float): Int {
+        var bestIdx = 0
+        var bestVal = Float.MIN_VALUE
+        forEachIndexed { i, item ->
+            val v = selector(item)
+            if (v > bestVal) { bestVal = v; bestIdx = i }
+        }
+        return bestIdx
+    }
+
+    companion object {
+        private const val DAY_MS = 24 * 60 * 60 * 1000L
+    }
 }
+
+data class SeriesData(
+    val id: String,
+    val date: Long,
+    val centerLat: Double?,
+    val centerLon: Double?,
+)
+
+data class Assignment(
+    val seriesId: String,
+    val groupId: String?,
+)
+
+data class GroupingResult(
+    val series: List<SeriesData>,
+    val assignments: Map<Long, Assignment>, // mediaId → assignment
+)
+
+

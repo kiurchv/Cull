@@ -7,18 +7,49 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.*
+import kotlinx.coroutines.launch
 import xyz.kiurchv.cull.domain.GroupingSettings
+import xyz.kiurchv.cull.worker.GroupingWorker
+import android.content.Context
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.work.WorkManager
+import dagger.hilt.android.qualifiers.ApplicationContext
+import javax.inject.Inject
+import kotlin.math.roundToInt
+
+@HiltViewModel
+class SettingsViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
+) : ViewModel() {
+
+    private val _settings = MutableStateFlow(GroupingSettings())
+    val settings: StateFlow<GroupingSettings> = _settings.asStateFlow()
+
+    fun save(settings: GroupingSettings) {
+        _settings.value = settings
+        viewModelScope.launch {
+            WorkManager.getInstance(context).enqueue(GroupingWorker.buildRequest(settings))
+        }
+    }
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
-    current: GroupingSettings,
-    onSave: (GroupingSettings) -> Unit,
     onBack: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
 ) {
-    var radiusMeters by remember { mutableFloatStateOf(current.seriesRadiusMeters.toFloat()) }
-    var batchSeconds by remember { mutableFloatStateOf(current.batchIntervalSeconds.toFloat()) }
-    var hashThreshold by remember { mutableFloatStateOf(current.duplicateHashThreshold.toFloat()) }
+    val current by viewModel.settings.collectAsStateWithLifecycle()
+
+    // Local state for sliders
+    var radiusMeters by remember(current) { mutableFloatStateOf(current.seriesRadiusMeters.toFloat()) }
+    var batchSeconds by remember(current) { mutableFloatStateOf(current.batchIntervalSeconds.toFloat()) }
+    var hashThreshold by remember(current) { mutableFloatStateOf(current.duplicateHashThreshold.toFloat()) }
 
     Scaffold(
         topBar = {
@@ -31,13 +62,11 @@ fun SettingsScreen(
                 },
                 actions = {
                     TextButton(onClick = {
-                        onSave(
-                            GroupingSettings(
-                                seriesRadiusMeters = radiusMeters.toDouble(),
-                                batchIntervalSeconds = batchSeconds.toLong(),
-                                duplicateHashThreshold = hashThreshold.toInt(),
-                            )
-                        )
+                        viewModel.save(GroupingSettings(
+                            seriesRadiusMeters = radiusMeters.toDouble(),
+                            batchIntervalSeconds = batchSeconds.toLong(),
+                            duplicateHashThreshold = hashThreshold.toInt(),
+                        ))
                         onBack()
                     }) { Text("Зберегти") }
                 }
@@ -53,52 +82,58 @@ fun SettingsScreen(
         ) {
             Spacer(Modifier.height(8.dp))
 
-            // Series radius
-            SliderSetting(
+            // Series radius — steps of 100m from 100m to 5000m
+            SteppedSlider(
                 label = "Радіус серії",
                 value = radiusMeters,
                 onValueChange = { radiusMeters = it },
                 valueRange = 100f..5000f,
-                steps = 49,
-                display = "%.0f м".format(radiusMeters),
-                description = "Фото зняті в межах цього радіусу в один день об'єднуються в серію",
+                stepSize = 100f,
+                display = "${radiusMeters.roundToInt()} м",
+                description = "Фото в межах цієї відстані за один день — одна серія",
             )
 
-            // Batch interval
-            SliderSetting(
+            // Batch interval — steps of 5s from 5s to 120s
+            SteppedSlider(
                 label = "Інтервал батчу",
                 value = batchSeconds,
                 onValueChange = { batchSeconds = it },
-                valueRange = 2f..120f,
-                steps = 58,
-                display = "%.0f с".format(batchSeconds),
-                description = "Фото зняті з інтервалом менше цього часу — один батч",
+                valueRange = 5f..120f,
+                stepSize = 5f,
+                display = "${batchSeconds.roundToInt()} с",
+                description = "Фото зняті з меншим інтервалом — один батч",
             )
 
-            // pHash threshold
-            SliderSetting(
+            // Duplicate threshold — steps of 1 from 1 to 20
+            SteppedSlider(
                 label = "Чутливість дублікатів",
                 value = hashThreshold,
                 onValueChange = { hashThreshold = it },
                 valueRange = 1f..20f,
-                steps = 19,
-                display = "%.0f біт".format(hashThreshold),
-                description = "Менше = тільки майже ідентичні. Більше = схожі за змістом",
+                stepSize = 1f,
+                display = "${hashThreshold.roundToInt()} біт",
+                description = "Менше = тільки майже ідентичні · Більше = схожі за змістом",
             )
         }
     }
 }
 
 @Composable
-private fun SliderSetting(
+private fun SteppedSlider(
     label: String,
     value: Float,
     onValueChange: (Float) -> Unit,
     valueRange: ClosedFloatingPointRange<Float>,
-    steps: Int,
+    stepSize: Float,
     display: String,
     description: String,
 ) {
+    val steps = ((valueRange.endInclusive - valueRange.start) / stepSize).toInt() - 1
+
+    // Snap to nearest step
+    val snappedValue = (((value - valueRange.start) / stepSize).roundToInt() * stepSize + valueRange.start)
+        .coerceIn(valueRange.start, valueRange.endInclusive)
+
     Column {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -109,8 +144,12 @@ private fun SliderSetting(
                 color = MaterialTheme.colorScheme.primary)
         }
         Slider(
-            value = value,
-            onValueChange = onValueChange,
+            value = snappedValue,
+            onValueChange = { raw ->
+                val snapped = (((raw - valueRange.start) / stepSize).roundToInt() * stepSize + valueRange.start)
+                    .coerceIn(valueRange.start, valueRange.endInclusive)
+                onValueChange(snapped)
+            },
             valueRange = valueRange,
             steps = steps,
         )
