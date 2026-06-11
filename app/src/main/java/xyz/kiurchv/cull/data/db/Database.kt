@@ -75,6 +75,12 @@ interface PhotoMetadataDao {
     @Query("SELECT * FROM photo_metadata WHERE groupId = :groupId ORDER BY dateTaken ASC")
     suspend fun getByGroupId(groupId: String): List<PhotoMetadataEntity>
 
+    @Query("SELECT * FROM photo_metadata WHERE mediaId = :mediaId")
+    suspend fun getById(mediaId: Long): PhotoMetadataEntity?
+
+    @Query("SELECT * FROM photo_metadata WHERE mediaId IN (:ids)")
+    suspend fun getByIds(ids: List<Long>): List<PhotoMetadataEntity>
+
     @Query("SELECT mediaId FROM photo_metadata")
     suspend fun getAllIds(): List<Long>
 

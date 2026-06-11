@@ -26,6 +26,7 @@ import xyz.kiurchv.cull.ui.PermissionGate
 import xyz.kiurchv.cull.ui.albums.AlbumsScreen
 import xyz.kiurchv.cull.ui.gallery.GalleryScreen
 import xyz.kiurchv.cull.ui.series.SeriesScreen
+import xyz.kiurchv.cull.ui.viewer.PhotoViewerScreen
 import xyz.kiurchv.cull.ui.settings.SettingsScreen
 import xyz.kiurchv.cull.worker.IndexingWorker
 import javax.inject.Inject
@@ -78,9 +79,12 @@ object AppModule {
 private object Routes {
     const val GALLERY = "gallery"
     const val SERIES = "series/{seriesId}"
+    const val VIEWER = "viewer/{mediaIds}/{startId}"
     const val ALBUMS = "albums"
     const val SETTINGS = "settings"
-    fun series(id: String) = "series/${id}"
+    fun series(id: String) = "series/$id"
+    fun viewer(mediaIds: List<Long>, startId: Long) =
+        "viewer/${mediaIds.joinToString(",")}/\${startId}"
 }
 
 // ---- MainActivity ----
@@ -111,6 +115,19 @@ private fun CullApp() {
                     val seriesId = backStack.arguments?.getString("seriesId") ?: return@composable
                     SeriesScreen(
                         seriesId = seriesId,
+                        onBack = { navController.popBackStack() },
+                        onPhotoClick = { mediaId, allIds ->
+                            navController.navigate(Routes.viewer(allIds, mediaId))
+                        },
+                    )
+                }
+                composable(Routes.VIEWER) { backStack ->
+                    val mediaIdsStr = backStack.arguments?.getString("mediaIds") ?: return@composable
+                    val startId = backStack.arguments?.getString("startId")?.toLongOrNull() ?: return@composable
+                    val mediaIds = mediaIdsStr.split(",").mapNotNull { it.toLongOrNull() }
+                    PhotoViewerScreen(
+                        mediaIds = mediaIds,
+                        startMediaId = startId,
                         onBack = { navController.popBackStack() },
                     )
                 }
