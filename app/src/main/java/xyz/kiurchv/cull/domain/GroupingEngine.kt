@@ -72,7 +72,7 @@ class GroupingEngine @Inject constructor(
 
         if (withoutGeo.isNotEmpty()) {
             if (clusters.isEmpty()) clusters += mutableListOf()
-            clusters.first() += withoutGeo
+            clusters[0].addAll(withoutGeo)
         }
 
         return clusters
