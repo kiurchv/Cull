@@ -19,7 +19,6 @@ data class Photo(
     val pHash: Long? = null,
     val sharpness: Float = 0f,
     val pendingDelete: Boolean = false,
-    val seriesId: String? = null,
     val groupId: String? = null,
 )
 

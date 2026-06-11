@@ -135,7 +135,7 @@ class SeriesViewModel @Inject constructor(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SeriesScreen(
-    seriesId: String,
+    series: xyz.kiurchv.cull.data.model.Series,
     onBack: () -> Unit,
     onPhotoClick: (mediaId: Long, allIds: List<Long>) -> Unit = { _, _ -> },
     onDuplicateGroupClick: (groupId: String) -> Unit = {},
@@ -145,6 +145,8 @@ fun SeriesScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val dateFormat = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
+
+    LaunchedEffect(series.id) { viewModel.load(series) }
 
     // Series is loaded via navigation cache — see MainActivity
 

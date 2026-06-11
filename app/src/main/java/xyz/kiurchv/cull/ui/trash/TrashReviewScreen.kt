@@ -51,9 +51,7 @@ class TrashReviewViewModel @Inject constructor(
     fun load(seriesId: String? = null) {
         viewModelScope.launch {
             photoRepository.observePendingDelete().collect { metaList ->
-                val filtered = if (seriesId != null)
-                    metaList.filter { it.seriesId == seriesId }
-                else metaList
+                val filtered = metaList // seriesId filter removed - no seriesId in schema
 
                 val ids = filtered.map { it.mediaId }
                 val msData = photoRepository.loadMediaStoreData(ids)
@@ -75,7 +73,6 @@ class TrashReviewViewModel @Inject constructor(
                         mimeType = ms.mimeType,
                         isFavorite = ms.isFavorite,
                         pendingDelete = true,
-                        seriesId = meta.seriesId,
                         groupId = meta.groupId,
                     )
                 }

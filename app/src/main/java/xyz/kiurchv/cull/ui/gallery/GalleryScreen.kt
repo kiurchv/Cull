@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -205,11 +204,11 @@ fun GalleryScreen(
         if (shouldLoadMore) viewModel.loadNextPage()
     }
 
-    val pullRefreshState = rememberPullToRefreshState()
-    if (pullRefreshState.isRefreshing) {
-        LaunchedEffect(Unit) {
+    var isRefreshing by remember { mutableStateOf(false) }
+    LaunchedEffect(isRefreshing) {
+        if (isRefreshing) {
             viewModel.refresh()
-            pullRefreshState.endRefresh()
+            isRefreshing = false
         }
     }
 
@@ -246,8 +245,8 @@ fun GalleryScreen(
         }
     ) { padding ->
         PullToRefreshBox(
-            state = pullRefreshState,
-            onRefresh = viewModel::refresh,
+            isRefreshing = isRefreshing,
+            onRefresh = { isRefreshing = true },
             modifier = Modifier.fillMaxSize().padding(padding),
         ) {
             when {
