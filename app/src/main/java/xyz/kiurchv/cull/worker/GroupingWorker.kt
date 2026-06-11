@@ -79,18 +79,21 @@ class GroupingWorker @AssistedInject constructor(
         })
 
         // 3. Update photo_metadata assignments
-        result.assignments.entries.chunked(500) { chunk ->
-            chunk.forEach { (mediaId, assignment) ->
-                photoMetadataDao.upsert(
-                    PhotoMetadataEntity(
-                        mediaId = mediaId,
-                        dateTaken = photos.first { it.id == mediaId }.dateTaken,
-                        seriesId = assignment.seriesId,
-                        groupId = assignment.groupId,
-                    )
+        val photoDateMap = photos.associate { it.id to it.dateTaken }
+        result.assignments.entries
+            .chunked(500)
+            .forEach { chunk ->
+                photoMetadataDao.upsertAll(
+                    chunk.map { (mediaId, assignment) ->
+                        PhotoMetadataEntity(
+                            mediaId = mediaId,
+                            dateTaken = photoDateMap[mediaId] ?: 0L,
+                            seriesId = assignment.seriesId,
+                            groupId = assignment.groupId,
+                        )
+                    }
                 )
             }
-        }
 
         Result.success()
     }
