@@ -41,12 +41,17 @@ jobs:
         run: ./gradlew detekt --stacktrace 2>&1 | tail -50
         continue-on-error: true
 
+      - name: Show Detekt output files
+        if: always()
+        run: find app/build/reports/detekt/ -type f 2>/dev/null || echo "No detekt reports found"
+
       - name: Upload Detekt report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: detekt-report
           path: app/build/reports/detekt/
+          if-no-files-found: warn
           retention-days: 7
 
       - name: Android Lint
