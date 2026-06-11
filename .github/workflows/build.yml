@@ -29,8 +29,18 @@ jobs:
       - name: Generate Gradle Wrapper
         run: gradle wrapper --gradle-version=8.14.5
 
+      - name: Check project structure
+        run: |
+          echo "=== Java version ==="
+          java -version
+          echo "=== Gradle version ==="
+          ./gradlew --version
+          echo "=== Project tasks available ==="
+          ./gradlew tasks --group="build" 2>&1 | head -40
+        continue-on-error: true
+
       - name: Detekt
-        run: ./gradlew detekt --info --stacktrace 2>&1 | tail -100
+        run: ./gradlew detekt --stacktrace 2>&1 | tail -50
         continue-on-error: true
 
       - name: Upload Detekt report
@@ -42,7 +52,7 @@ jobs:
           retention-days: 7
 
       - name: Android Lint
-        run: ./gradlew lint --info --stacktrace 2>&1 | tail -100
+        run: ./gradlew lint --stacktrace 2>&1 | tail -50
         continue-on-error: true
 
       - name: Upload Lint report
@@ -54,7 +64,7 @@ jobs:
           retention-days: 7
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --info --stacktrace 2>&1
+        run: ./gradlew assembleDebug --stacktrace 2>&1
 
       - name: Print Gradle build results
         if: failure()
