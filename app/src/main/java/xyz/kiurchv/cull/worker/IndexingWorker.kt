@@ -7,6 +7,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import xyz.kiurchv.cull.data.IndexingStore
 import xyz.kiurchv.cull.data.PhotoRepository
 import xyz.kiurchv.cull.data.db.PhotoHashDao
 import xyz.kiurchv.cull.data.db.PhotoHashEntity
@@ -23,80 +24,102 @@ class IndexingWorker @AssistedInject constructor(
     private val photoMetadataDao: PhotoMetadataDao,
     private val hashDao: PhotoHashDao,
     private val pHashEngine: PHashEngine,
+    private val indexingStore: IndexingStore,
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
         const val WORK_NAME = "photo_indexing"
-        const val PROGRESS_CURRENT = "current"
-        const val PROGRESS_TOTAL = "total"
-
-        fun buildRequest(): PeriodicWorkRequest =
-            PeriodicWorkRequestBuilder<IndexingWorker>(1, TimeUnit.HOURS)
-                .setConstraints(Constraints.Builder().setRequiresBatteryNotLow(false).build())
-                .build()
+        const val WORK_NAME_PERIODIC = "photo_indexing_periodic"
 
         fun buildOneTimeRequest(): OneTimeWorkRequest =
-            OneTimeWorkRequestBuilder<IndexingWorker>().build()
+            OneTimeWorkRequestBuilder<IndexingWorker>()
+                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                .build()
+
+        fun buildPeriodicRequest(): PeriodicWorkRequest =
+            PeriodicWorkRequestBuilder<IndexingWorker>(6, TimeUnit.HOURS)
+                .setConstraints(
+                    Constraints.Builder().setRequiresBatteryNotLow(true).build()
+                )
+                .build()
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val photos = photoRepository.loadPhotosFromMediaStore()
-        if (photos.isEmpty()) return@withContext Result.success()
+        try {
+            indexingStore.setRunning()
 
-        val currentIds = photos.map { it.id }.toSet()
+            // 1. Load all photos from MediaStore (fast — metadata only)
+            val photos = photoRepository.loadPhotosFromMediaStore()
+            if (photos.isEmpty()) {
+                indexingStore.setSuccess(0)
+                return@withContext Result.success()
+            }
 
-        // Sync photo_metadata — add new, remove deleted
-        val existingMetaIds = photoMetadataDao.getAllIds().toSet()
-        val newPhotos = photos.filter { it.id !in existingMetaIds }
+            val currentIds = photos.map { it.id }.toSet()
 
-        if (newPhotos.isNotEmpty()) {
-            photoMetadataDao.upsertAll(newPhotos.map { photo ->
-                PhotoMetadataEntity(
-                    mediaId = photo.id,
-                    dateTaken = photo.dateTaken,
-                )
-            })
-        }
+            // 2. Sync photo_metadata
+            val existingMetaIds = photoMetadataDao.getAllIds().toSet()
+            val newPhotos = photos.filter { it.id !in existingMetaIds }
+            if (newPhotos.isNotEmpty()) {
+                photoMetadataDao.upsertAll(newPhotos.map { photo ->
+                    PhotoMetadataEntity(mediaId = photo.id, dateTaken = photo.dateTaken)
+                })
+            }
+            val deletedIds = existingMetaIds - currentIds
+            if (deletedIds.isNotEmpty()) {
+                photoMetadataDao.deleteByIds(deletedIds.toList())
+                hashDao.deleteByIds(deletedIds.toList())
+            }
 
-        val deletedIds = existingMetaIds - currentIds
-        if (deletedIds.isNotEmpty()) {
-            photoMetadataDao.deleteByIds(deletedIds.toList())
-        }
+            // 3. Index pHash — latest day first, then older days
+            val existingHashIds = hashDao.getAllIds().toSet()
+            val toHash = photos.filter { it.id !in existingHashIds }
 
-        // Index pHash for new photos
-        val existingHashIds = hashDao.getAllIds().toSet()
-        val toHash = photos.filter { it.id !in existingHashIds }
+            if (toHash.isEmpty()) {
+                indexingStore.setSuccess(photoMetadataDao.getDistinctDays().size)
+                return@withContext Result.success()
+            }
 
-        if (toHash.isEmpty()) return@withContext Result.success()
+            val dayMs = 24 * 60 * 60 * 1000L
+            val byDay = toHash
+                .groupBy { it.dateTaken / dayMs }
+                .toSortedMap(reverseOrder()) // latest day first
 
-        setProgress(workDataOf(PROGRESS_CURRENT to 0, PROGRESS_TOTAL to toHash.size))
+            val totalDays = byDay.size
+            var daysIndexed = 0
 
-        val batch = mutableListOf<PhotoHashEntity>()
-        toHash.forEachIndexed { idx, photo ->
-            val hash = pHashEngine.computeHash(photo.path)
-            val sharpness = pHashEngine.computeSharpness(photo.path)
-            if (hash != null) {
-                batch.add(PhotoHashEntity(
-                    mediaId = photo.id,
-                    path = photo.path,
-                    pHash = hash,
-                    sharpness = sharpness,
+            byDay.forEach { (_, dayPhotos) ->
+                val batch = mutableListOf<PhotoHashEntity>()
+                dayPhotos.forEach { photo ->
+                    val hash = pHashEngine.computeHash(photo.path) ?: return@forEach
+                    val sharpness = pHashEngine.computeSharpness(photo.path)
+                    batch.add(PhotoHashEntity(
+                        mediaId = photo.id,
+                        path = photo.path,
+                        pHash = hash,
+                        sharpness = sharpness,
+                    ))
+                    if (batch.size >= 50) {
+                        hashDao.upsertAll(batch.toList())
+                        batch.clear()
+                    }
+                }
+                if (batch.isNotEmpty()) hashDao.upsertAll(batch)
+
+                daysIndexed++
+                indexingStore.incrementIndexedDays()
+
+                setProgress(workDataOf(
+                    "days_done" to daysIndexed,
+                    "days_total" to totalDays,
                 ))
             }
-            if (batch.size >= 50) {
-                hashDao.upsertAll(batch.toList())
-                batch.clear()
-            }
-            if (idx % 10 == 0) {
-                setProgress(workDataOf(PROGRESS_CURRENT to idx + 1, PROGRESS_TOTAL to toHash.size))
-            }
+
+            indexingStore.setSuccess(photoMetadataDao.getDistinctDays().size)
+            Result.success()
+        } catch (e: Exception) {
+            indexingStore.setError(e.message ?: "Unknown error")
+            Result.failure()
         }
-        if (batch.isNotEmpty()) hashDao.upsertAll(batch)
-
-        // Clean stale hashes
-        val staleHashIds = existingHashIds - currentIds
-        if (staleHashIds.isNotEmpty()) hashDao.deleteByIds(staleHashIds.toList())
-
-        Result.success()
     }
 }

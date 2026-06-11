@@ -54,7 +54,6 @@ data class SeriesUiState(
 @HiltViewModel
 class SeriesViewModel @Inject constructor(
     private val photoMetadataDao: PhotoMetadataDao,
-    private val seriesDao: SeriesDao,
     private val photoHashDao: PhotoHashDao,
     private val groupingEngine: GroupingEngine,
     private val photoRepository: xyz.kiurchv.cull.data.PhotoRepository,
@@ -67,48 +66,16 @@ class SeriesViewModel @Inject constructor(
 
     private var settings = GroupingSettings()
 
-    fun load(seriesId: String) {
+    fun load(series: xyz.kiurchv.cull.data.model.Series) {
+        // Use pre-built batches from Series object passed via navigation
         viewModelScope.launch {
-            val series = seriesDao.getById(seriesId) ?: return@launch
-            photoMetadataDao.observeBySeriesId(seriesId).collect { metaList ->
-                val ids = metaList.map { it.mediaId }
-                val hashMap = photoHashDao.getByIds(ids)
-                    .associate { it.mediaId to (it.pHash to it.sharpness) }
-                val msData = photoRepository.loadMediaStoreData(ids)
-
-                val photos = metaList.mapNotNull { meta ->
-                    val ms = msData[meta.mediaId] ?: return@mapNotNull null
-                    val (_, sharpness) = hashMap[meta.mediaId] ?: (0L to 0f)
-                    Photo(
-                        id = meta.mediaId,
-                        uri = Uri.withAppendedPath(
-                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-                            meta.mediaId.toString()
-                        ),
-                        path = ms.path,
-                        displayName = ms.displayName,
-                        dateTaken = meta.dateTaken,
-                        width = ms.width,
-                        height = ms.height,
-                        size = ms.size,
-                        mimeType = ms.mimeType,
-                        isFavorite = ms.isFavorite,
-                        sharpness = sharpness,
-                        pendingDelete = meta.pendingDelete,
-                        seriesId = meta.seriesId,
-                        groupId = meta.groupId,
-                    )
-                }
-
-                val batches = groupingEngine.buildBatches(photos, settings)
-                _state.update {
-                    it.copy(
-                        locationName = series.locationName,
-                        date = series.date,
-                        batches = batches,
-                        isLoading = false,
-                    )
-                }
+            _state.update {
+                it.copy(
+                    locationName = series.locationName,
+                    date = series.date,
+                    batches = series.batches,
+                    isLoading = false,
+                )
             }
         }
     }
@@ -179,7 +146,7 @@ fun SeriesScreen(
     val timeFormat = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
     val dateFormat = remember { SimpleDateFormat("d MMMM yyyy", Locale.getDefault()) }
 
-    LaunchedEffect(seriesId) { viewModel.load(seriesId) }
+    // Series is loaded via navigation cache — see MainActivity
 
     Scaffold(
         topBar = {

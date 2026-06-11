@@ -62,6 +62,63 @@ class GroupingEngine @Inject constructor() {
     }
 
     /**
+     * Build Series objects for a single day from a list of photos belonging to that day.
+     * Called lazily per page in GalleryViewModel.
+     */
+    fun buildSeriesForDay(
+        photos: List<Photo>,
+        dayEpoch: Long,
+        settings: GroupingSettings,
+        hashMap: Map<Long, Pair<Long, Float>>,
+    ): List<Series> {
+        if (photos.isEmpty()) return emptyList()
+
+        val clusters = clusterByGeo(photos, settings.seriesRadiusMeters)
+        return clusters.mapIndexed { idx, cluster ->
+            val center = computeCenter(cluster)
+            // Assign groupIds in-memory (don't persist here)
+            val withGroups = assignGroupsInMemory(cluster, settings, hashMap)
+            val batches = buildBatches(withGroups, settings)
+            Series(
+                id = "${dayEpoch}_$idx",
+                date = dayEpoch * DAY_MS,
+                centerLat = center?.first,
+                centerLon = center?.second,
+                locationName = null,
+                batches = batches,
+            )
+        }
+    }
+
+    private fun assignGroupsInMemory(
+        photos: List<Photo>,
+        settings: GroupingSettings,
+        hashMap: Map<Long, Pair<Long, Float>>,
+    ): List<Photo> {
+        val withHash = photos.filter { hashMap.containsKey(it.id) }
+        val withoutHash = photos.filter { !hashMap.containsKey(it.id) }
+        val groups = mutableListOf<MutableList<Photo>>()
+
+        for (photo in withHash) {
+            val photoHash = hashMap[photo.id]!!.first
+            val added = groups.any { group ->
+                val groupHash = hashMap[group.first().id]?.first ?: return@any false
+                val dist = java.lang.Long.bitCount(photoHash xor photoHash.xor(groupHash))
+                if (dist <= settings.duplicateHashThreshold) { group.add(photo); true } else false
+            }
+            if (!added) groups.add(mutableListOf(photo))
+        }
+
+        val result = mutableListOf<Photo>()
+        groups.forEachIndexed { idx, group ->
+            val groupId = if (group.size > 1) "g_${photos.firstOrNull()?.dateTaken}_$idx" else null
+            group.forEach { result.add(it.copy(groupId = groupId)) }
+        }
+        result.addAll(withoutHash)
+        return result
+    }
+
+    /**
      * Full grouping from scratch — used by GroupingWorker.
      * Returns: map of mediaId → (seriesId, groupId?)
      */

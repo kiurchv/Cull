@@ -14,7 +14,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import xyz.kiurchv.cull.domain.GroupingSettings
-import xyz.kiurchv.cull.worker.GroupingWorker
 import android.content.Context
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.work.WorkManager
@@ -32,9 +31,6 @@ class SettingsViewModel @Inject constructor(
 
     fun save(settings: GroupingSettings) {
         _settings.value = settings
-        viewModelScope.launch {
-            WorkManager.getInstance(context).enqueue(GroupingWorker.buildRequest(settings))
-        }
     }
 }
 

@@ -119,6 +119,9 @@ dependencies {
     implementation(libs.lifecycle.viewmodel.compose)
     implementation(libs.lifecycle.runtime.compose)
 
+    // DataStore
+    implementation(libs.datastore.preferences)
+
     // Detekt formatting rules
     detektPlugins(libs.detekt.formatting)
 }

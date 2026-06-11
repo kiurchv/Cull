@@ -21,7 +21,10 @@ import dagger.hilt.android.HiltAndroidApp
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import androidx.room.Room
-import xyz.kiurchv.cull.data.db.*
+import xyz.kiurchv.cull.data.db.AlbumDao
+import xyz.kiurchv.cull.data.db.CullDatabase
+import xyz.kiurchv.cull.data.db.PhotoHashDao
+import xyz.kiurchv.cull.data.db.PhotoMetadataDao
 import xyz.kiurchv.cull.ui.PermissionGate
 import xyz.kiurchv.cull.ui.albums.AlbumContentScreen
 import xyz.kiurchv.cull.ui.albums.AlbumsScreen
@@ -49,12 +52,16 @@ class CullApplication : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+        WorkManager.getInstance(this).enqueueUniqueWork(
             IndexingWorker.WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            IndexingWorker.buildRequest(),
+            androidx.work.ExistingWorkPolicy.KEEP,
+            IndexingWorker.buildOneTimeRequest(),
         )
-        WorkManager.getInstance(this).enqueue(IndexingWorker.buildOneTimeRequest())
+        WorkManager.getInstance(this).enqueueUniquePeriodicWork(
+            IndexingWorker.WORK_NAME_PERIODIC,
+            ExistingPeriodicWorkPolicy.KEEP,
+            IndexingWorker.buildPeriodicRequest(),
+        )
     }
 }
 
@@ -72,7 +79,6 @@ object AppModule {
             .build()
 
     @Provides fun providePhotoMetadataDao(db: CullDatabase): PhotoMetadataDao = db.photoMetadataDao()
-    @Provides fun provideSeriesDao(db: CullDatabase): SeriesDao = db.seriesDao()
     @Provides fun providePhotoHashDao(db: CullDatabase): PhotoHashDao = db.photoHashDao()
     @Provides fun provideAlbumDao(db: CullDatabase): AlbumDao = db.albumDao()
 }
@@ -111,20 +117,25 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun CullApp() {
     val navController = rememberNavController()
+    val seriesCache = remember { mutableStateMapOf<String, xyz.kiurchv.cull.data.model.Series>() }
     MaterialTheme {
         PermissionGate {
             NavHost(navController = navController, startDestination = Routes.GALLERY) {
                 composable(Routes.GALLERY) {
                     GalleryScreen(
-                        onSeriesClick = { navController.navigate(Routes.series(it)) },
+                        onSeriesClick = { series ->
+                            seriesCache[series.id] = series
+                            navController.navigate(Routes.series(series.id))
+                        },
                         onSettingsClick = { navController.navigate(Routes.SETTINGS) },
                         onAlbumsClick = { navController.navigate(Routes.ALBUMS) },
                     )
                 }
                 composable(Routes.SERIES) { backStack ->
                     val seriesId = backStack.arguments?.getString("seriesId") ?: return@composable
+                    val series = seriesCache[seriesId] ?: return@composable
                     SeriesScreen(
-                        seriesId = seriesId,
+                        series = series,
                         onBack = { navController.popBackStack() },
                         onPhotoClick = { mediaId, allIds ->
                             navController.navigate(Routes.viewer(allIds, mediaId))
