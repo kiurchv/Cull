@@ -24,13 +24,27 @@ import kotlin.math.roundToInt
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
+    private val indexingStore: xyz.kiurchv.cull.data.IndexingStore,
 ) : ViewModel() {
 
     private val _settings = MutableStateFlow(GroupingSettings())
     val settings: StateFlow<GroupingSettings> = _settings.asStateFlow()
 
+    val indexingState = indexingStore.state.stateIn(
+        viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000),
+        xyz.kiurchv.cull.data.IndexingState(),
+    )
+
     fun save(settings: GroupingSettings) {
         _settings.value = settings
+    }
+
+    fun refreshIndex() {
+        androidx.work.WorkManager.getInstance(context).enqueueUniqueWork(
+            xyz.kiurchv.cull.worker.IndexingWorker.WORK_NAME,
+            androidx.work.ExistingWorkPolicy.REPLACE,
+            xyz.kiurchv.cull.worker.IndexingWorker.buildOneTimeRequest(),
+        )
     }
 }
 
@@ -41,6 +55,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel(),
 ) {
     val current by viewModel.settings.collectAsStateWithLifecycle()
+    val indexingState by viewModel.indexingState.collectAsStateWithLifecycle()
 
     // Local state for sliders
     var radiusMeters by remember(current) { mutableFloatStateOf(current.seriesRadiusMeters.toFloat()) }
@@ -77,6 +92,45 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(24.dp),
         ) {
             Spacer(Modifier.height(8.dp))
+
+            // Indexing status + refresh
+            Card {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(Icons.Default.Refresh, null)
+                        Text("Індексування фото", style = MaterialTheme.typography.titleSmall)
+                    }
+                    Text(
+                        when (indexingState.status) {
+                            xyz.kiurchv.cull.data.IndexingStatus.RUNNING ->
+                                "Виконується… проіндексовано днів: ${indexingState.indexedDayCount}"
+                            xyz.kiurchv.cull.data.IndexingStatus.ERROR ->
+                                "Помилка: ${indexingState.error ?: "невідома"}"
+                            xyz.kiurchv.cull.data.IndexingStatus.SUCCESS ->
+                                "Готово · ${indexingState.indexedDayCount} днів проіндексовано"
+                            else -> "Очікування"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    OutlinedButton(
+                        onClick = viewModel::refreshIndex,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        if (indexingState.status == xyz.kiurchv.cull.data.IndexingStatus.RUNNING) {
+                            CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                            Spacer(Modifier.width(8.dp))
+                        }
+                        Text("Оновити індекс")
+                    }
+                }
+            }
 
             // Series radius — steps of 100m from 100m to 5000m
             SteppedSlider(

@@ -81,6 +81,20 @@ class GalleryViewModel @Inject constructor(
             }
         }
         viewModelScope.launch { refreshDays() }
+
+        // Safeguard: if WorkManager reports the indexing work finished (success/failed/cancelled)
+        // but IndexingStore still says RUNNING (e.g. worker was killed by the system),
+        // force-refresh days so we don't get stuck on the loading screen forever.
+        viewModelScope.launch {
+            WorkManager.getInstance(context)
+                .getWorkInfosForUniqueWorkFlow(IndexingWorker.WORK_NAME)
+                .collect { infos ->
+                    val info = infos.firstOrNull() ?: return@collect
+                    if (info.state.isFinished && _state.value.indexingState.status == IndexingStatus.RUNNING) {
+                        refreshDays()
+                    }
+                }
+        }
     }
 
     private suspend fun refreshDays() {
@@ -247,7 +261,7 @@ fun GalleryScreen(
                     FirstRunLoader()
                 }
                 state.series.isEmpty() && !state.isLoadingMore -> {
-                    EmptyState(onRefresh = viewModel::refresh)
+                    EmptyState()
                 }
                 else -> {
                     LazyColumn(
@@ -267,20 +281,6 @@ fun GalleryScreen(
                                     contentAlignment = Alignment.Center,
                                 ) {
                                     CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                                }
-                            }
-                        }
-                        // Refresh button at bottom of list
-                        item {
-                            Box(
-                                Modifier.fillMaxWidth().padding(16.dp),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                OutlinedButton(onClick = viewModel::refresh) {
-                                    Icon(Icons.Default.Refresh, null,
-                                        modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(6.dp))
-                                    Text("Оновити")
                                 }
                             }
                         }

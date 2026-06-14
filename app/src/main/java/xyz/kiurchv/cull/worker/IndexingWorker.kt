@@ -32,9 +32,7 @@ class IndexingWorker @AssistedInject constructor(
         const val WORK_NAME_PERIODIC = "photo_indexing_periodic"
 
         fun buildOneTimeRequest(): OneTimeWorkRequest =
-            OneTimeWorkRequestBuilder<IndexingWorker>()
-                .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                .build()
+            OneTimeWorkRequestBuilder<IndexingWorker>().build()
 
         fun buildPeriodicRequest(): PeriodicWorkRequest =
             PeriodicWorkRequestBuilder<IndexingWorker>(6, TimeUnit.HOURS)
