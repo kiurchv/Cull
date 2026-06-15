@@ -50,11 +50,13 @@ android {
 
     lint {
         abortOnError = false
+        checkReleaseBuilds = false
         htmlReport = true
         htmlOutput = file("build/reports/lint/lint-report.html")
         xmlReport = true
         xmlOutput = file("build/reports/lint/lint-report.xml")
         checkDependencies = true
+        disable += "RemoveWorkManagerInitializer"
     }
 }
 
