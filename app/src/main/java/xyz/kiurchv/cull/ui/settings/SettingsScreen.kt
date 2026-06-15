@@ -37,6 +37,23 @@ class SettingsViewModel @Inject constructor(
         xyz.kiurchv.cull.data.IndexingState(),
     )
 
+    val workInfoState: StateFlow<String> = androidx.work.WorkManager.getInstance(context)
+        .getWorkInfosForUniqueWorkFlow(xyz.kiurchv.cull.worker.IndexingWorker.WORK_NAME)
+        .map { infos ->
+            if (infos.isEmpty()) return@map "Немає записів WorkManager"
+            infos.joinToString("\n") { info ->
+                buildString {
+                    append("Стан: ${info.state}")
+                    if (info.state == androidx.work.WorkInfo.State.FAILED) {
+                        append("\nOutputData: ${info.outputData.keyValueMap}")
+                    }
+                    append("\nRunAttemptCount: ${info.runAttemptCount}")
+                    append("\nProgress: ${info.progress.keyValueMap}")
+                }
+            }
+        }
+        .stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(5_000), "Завантаження…")
+
     fun save(settings: GroupingSettings) {
         _settings.value = settings
     }
@@ -58,6 +75,7 @@ fun SettingsScreen(
 ) {
     val current by viewModel.settings.collectAsStateWithLifecycle()
     val indexingState by viewModel.indexingState.collectAsStateWithLifecycle()
+    val workInfoState by viewModel.workInfoState.collectAsStateWithLifecycle()
 
     // Local state for sliders
     var radiusMeters by remember(current) { mutableFloatStateOf(current.seriesRadiusMeters.toFloat()) }
@@ -131,6 +149,17 @@ fun SettingsScreen(
                         }
                         Text("Оновити індекс")
                     }
+                    HorizontalDivider()
+                    Text(
+                        "Діагностика WorkManager:",
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Text(
+                        workInfoState,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace,
+                    )
                 }
             }
 
