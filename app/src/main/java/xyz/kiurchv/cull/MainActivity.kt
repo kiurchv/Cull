@@ -54,7 +54,7 @@ class CullApplication : Application(), Configuration.Provider {
         super.onCreate()
         WorkManager.getInstance(this).enqueueUniqueWork(
             IndexingWorker.WORK_NAME,
-            androidx.work.ExistingWorkPolicy.KEEP,
+            androidx.work.ExistingWorkPolicy.REPLACE,
             IndexingWorker.buildOneTimeRequest(),
         )
         WorkManager.getInstance(this).enqueueUniquePeriodicWork(
