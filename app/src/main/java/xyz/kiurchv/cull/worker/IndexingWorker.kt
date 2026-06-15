@@ -1,30 +1,22 @@
 package xyz.kiurchv.cull.worker
 
 import android.content.Context
-import androidx.hilt.work.HiltWorker
 import androidx.work.*
-import dagger.assisted.Assisted
-import dagger.assisted.AssistedInject
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import xyz.kiurchv.cull.data.IndexingStore
-import xyz.kiurchv.cull.data.PhotoRepository
-import xyz.kiurchv.cull.data.db.PhotoHashDao
 import xyz.kiurchv.cull.data.db.PhotoHashEntity
-import xyz.kiurchv.cull.data.db.PhotoMetadataDao
 import xyz.kiurchv.cull.data.db.PhotoMetadataEntity
-import xyz.kiurchv.cull.domain.PHashEngine
 import java.util.concurrent.TimeUnit
 
-@HiltWorker
-class IndexingWorker @AssistedInject constructor(
-    @Assisted appContext: Context,
-    @Assisted workerParams: WorkerParameters,
-    private val photoRepository: PhotoRepository,
-    private val photoMetadataDao: PhotoMetadataDao,
-    private val hashDao: PhotoHashDao,
-    private val pHashEngine: PHashEngine,
-    private val indexingStore: IndexingStore,
+/**
+ * Plain CoroutineWorker (not @HiltWorker) — dependencies are fetched via
+ * EntryPointAccessors to avoid relying on HiltWorkerFactory registration,
+ * which was causing this worker to fail with RunAttemptCount=0 (never started).
+ */
+class IndexingWorker(
+    appContext: Context,
+    workerParams: WorkerParameters,
 ) : CoroutineWorker(appContext, workerParams) {
 
     companion object {
@@ -43,6 +35,15 @@ class IndexingWorker @AssistedInject constructor(
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val entryPoint = EntryPointAccessors.fromApplication(
+            applicationContext, WorkerEntryPoint::class.java
+        )
+        val photoRepository = entryPoint.photoRepository()
+        val photoMetadataDao = entryPoint.photoMetadataDao()
+        val hashDao = entryPoint.photoHashDao()
+        val pHashEngine = entryPoint.pHashEngine()
+        val indexingStore = entryPoint.indexingStore()
+
         try {
             indexingStore.setRunning("Старт worker'а…")
 

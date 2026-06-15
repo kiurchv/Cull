@@ -50,13 +50,11 @@ android {
 
     lint {
         abortOnError = false
-        checkReleaseBuilds = false
         htmlReport = true
         htmlOutput = file("build/reports/lint/lint-report.html")
         xmlReport = true
         xmlOutput = file("build/reports/lint/lint-report.xml")
         checkDependencies = true
-        disable += "RemoveWorkManagerInitializer"
     }
 }
 
@@ -96,9 +94,7 @@ dependencies {
     // Hilt
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
-    implementation(libs.hilt.work)
     ksp(libs.hilt.compiler)
-    ksp(libs.hilt.work.compiler)
 
     // Room
     implementation(libs.room.runtime)

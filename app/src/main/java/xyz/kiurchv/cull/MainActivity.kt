@@ -8,7 +8,6 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
-import androidx.hilt.work.HiltWorkerFactory
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -35,20 +34,12 @@ import xyz.kiurchv.cull.ui.trash.TrashReviewScreen
 import xyz.kiurchv.cull.ui.viewer.PhotoViewerScreen
 import xyz.kiurchv.cull.ui.settings.SettingsScreen
 import xyz.kiurchv.cull.worker.IndexingWorker
-import javax.inject.Inject
 import javax.inject.Singleton
 
 // ---- Application ----
 
 @HiltAndroidApp
-class CullApplication : Application(), Configuration.Provider {
-
-    @Inject lateinit var workerFactory: HiltWorkerFactory
-
-    override val workManagerConfiguration: Configuration
-        get() = Configuration.Builder()
-            .setWorkerFactory(workerFactory)
-            .build()
+class CullApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
