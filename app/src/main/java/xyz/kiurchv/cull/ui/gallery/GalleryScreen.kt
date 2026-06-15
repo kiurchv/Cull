@@ -258,7 +258,7 @@ fun GalleryScreen(
         ) {
             when {
                 state.series.isEmpty() && state.indexingState.status == IndexingStatus.RUNNING -> {
-                    FirstRunLoader()
+                    FirstRunLoader(state.indexingState)
                 }
                 state.series.isEmpty() && !state.isLoadingMore -> {
                     EmptyState()
@@ -292,39 +292,50 @@ fun GalleryScreen(
 }
 
 @Composable
-private fun FirstRunLoader() {
+private fun FirstRunLoader(state: IndexingState) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(16.dp),
+            modifier = Modifier.padding(horizontal = 32.dp),
         ) {
             CircularProgressIndicator()
             Text(
-                "Індексуємо фото…\nЦе займе кілька хвилин при першому запуску",
+                "Перше індексування фото",
+                style = MaterialTheme.typography.titleMedium,
+                textAlign = TextAlign.Center,
+            )
+            Text(
+                state.stageMessage.ifBlank { "Підготовка…" },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
             )
+            if (state.totalDayCount > 0) {
+                LinearProgressIndicator(
+                    progress = { state.indexedDayCount.toFloat() / state.totalDayCount },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Text(
+                    "${state.indexedDayCount} / ${state.totalDayCount} днів",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
         }
     }
 }
 
 @Composable
-private fun EmptyState(onRefresh: () -> Unit = {}) {
+private fun EmptyState() {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Text(
-            "Фото не знайдено\nДозвольте доступ до фото або потягніть вниз для оновлення",
+            "Фото не знайдено.\nДозвольте доступ до фото в налаштуваннях системи.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
             modifier = Modifier.padding(horizontal = 32.dp),
         )
-        Spacer(Modifier.height(16.dp))
-        OutlinedButton(onClick = onRefresh) {
-            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text("Оновити")
-        }
     }
 }
 

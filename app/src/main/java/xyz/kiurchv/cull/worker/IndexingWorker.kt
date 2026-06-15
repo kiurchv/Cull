@@ -44,7 +44,7 @@ class IndexingWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            indexingStore.setRunning()
+            indexingStore.setRunning("Сканування фотогалереї…")
 
             // 1. Load all photos from MediaStore (fast — metadata only)
             val photos = photoRepository.loadPhotosFromMediaStore()
@@ -53,6 +53,7 @@ class IndexingWorker @AssistedInject constructor(
                 return@withContext Result.success()
             }
 
+            indexingStore.setStage("Знайдено ${photos.size} фото. Синхронізація…")
             val currentIds = photos.map { it.id }.toSet()
 
             // 2. Sync photo_metadata
@@ -84,9 +85,17 @@ class IndexingWorker @AssistedInject constructor(
                 .toSortedMap(reverseOrder()) // latest day first
 
             val totalDays = byDay.size
+            indexingStore.setTotalDays(totalDays)
             var daysIndexed = 0
 
-            byDay.forEach { (_, dayPhotos) ->
+            val dateFormat = java.text.SimpleDateFormat("d MMMM", java.util.Locale("uk"))
+
+            byDay.forEach { (dayEpoch, dayPhotos) ->
+                val dayLabel = dateFormat.format(java.util.Date(dayEpoch * dayMs))
+                indexingStore.setStage(
+                    "Аналіз фото: $dayLabel (${daysIndexed + 1} з $totalDays, ${dayPhotos.size} фото)"
+                )
+
                 val batch = mutableListOf<PhotoHashEntity>()
                 dayPhotos.forEach { photo ->
                     val hash = pHashEngine.computeHash(photo.path) ?: return@forEach
@@ -116,7 +125,7 @@ class IndexingWorker @AssistedInject constructor(
             indexingStore.setSuccess(photoMetadataDao.getDistinctDays().size)
             Result.success()
         } catch (e: Exception) {
-            indexingStore.setError(e.message ?: "Unknown error")
+            indexingStore.setError(e.message ?: "Невідома помилка")
             Result.failure()
         }
     }

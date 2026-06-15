@@ -111,7 +111,7 @@ fun SettingsScreen(
                     Text(
                         when (indexingState.status) {
                             xyz.kiurchv.cull.data.IndexingStatus.RUNNING ->
-                                "Виконується… проіндексовано днів: ${indexingState.indexedDayCount}"
+                                indexingState.stageMessage.ifBlank { "Виконується…" }
                             xyz.kiurchv.cull.data.IndexingStatus.ERROR ->
                                 "Помилка: ${indexingState.error ?: "невідома"}"
                             xyz.kiurchv.cull.data.IndexingStatus.SUCCESS ->
