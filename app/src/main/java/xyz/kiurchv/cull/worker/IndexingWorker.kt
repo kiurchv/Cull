@@ -44,7 +44,7 @@ class IndexingWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
         try {
-            indexingStore.setRunning("Сканування фотогалереї…")
+            indexingStore.setRunning("Старт worker'а…")
 
             // 1. Load all photos from MediaStore (fast — metadata only)
             val photos = photoRepository.loadPhotosFromMediaStore()
@@ -124,8 +124,11 @@ class IndexingWorker @AssistedInject constructor(
 
             indexingStore.setSuccess(photoMetadataDao.getDistinctDays().size)
             Result.success()
-        } catch (e: Exception) {
-            indexingStore.setError(e.message ?: "Невідома помилка")
+        } catch (e: Throwable) {
+            val trace = e.stackTraceToString().take(2000)
+            runCatching {
+                indexingStore.setError("${e::class.simpleName}: ${e.message}\n$trace")
+            }
             Result.failure()
         }
     }
