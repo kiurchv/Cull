@@ -1,1 +1,0 @@
--keep,allowobfuscation,allowshrinking class xyz.kiurchv.cull.ui.series.SeriesViewModel
