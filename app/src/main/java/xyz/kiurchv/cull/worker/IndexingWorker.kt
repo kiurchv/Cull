@@ -35,17 +35,29 @@ class IndexingWorker(
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
-        val entryPoint = EntryPointAccessors.fromApplication(
-            applicationContext, WorkerEntryPoint::class.java
-        )
-        val photoRepository = entryPoint.photoRepository()
-        val photoMetadataDao = entryPoint.photoMetadataDao()
-        val hashDao = entryPoint.photoHashDao()
-        val pHashEngine = entryPoint.pHashEngine()
-        val indexingStore = entryPoint.indexingStore()
+        // Wrap everything including EntryPoint access in try/catch
+        // so ANY failure (including DI issues) gets recorded to DataStore
+        val indexingStore = try {
+            EntryPointAccessors
+                .fromApplication(applicationContext, WorkerEntryPoint::class.java)
+                .indexingStore()
+        } catch (e: Throwable) {
+            // Can't even get indexingStore - nothing we can do except fail
+            android.util.Log.e("IndexingWorker", "EntryPoint access failed", e)
+            return@withContext Result.failure(
+                workDataOf("error" to "${e::class.simpleName}: ${e.message}")
+            )
+        }
 
         try {
             indexingStore.setRunning("Старт worker'а…")
+            val entryPoint = EntryPointAccessors.fromApplication(
+                applicationContext, WorkerEntryPoint::class.java
+            )
+            val photoRepository = entryPoint.photoRepository()
+            val photoMetadataDao = entryPoint.photoMetadataDao()
+            val hashDao = entryPoint.photoHashDao()
+            val pHashEngine = entryPoint.pHashEngine()
 
             // 1. Load all photos from MediaStore (fast — metadata only)
             val photos = photoRepository.loadPhotosFromMediaStore()

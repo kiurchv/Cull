@@ -44,11 +44,14 @@ class SettingsViewModel @Inject constructor(
             infos.joinToString("\n") { info ->
                 buildString {
                     append("Стан: ${info.state}")
-                    if (info.state == androidx.work.WorkInfo.State.FAILED) {
-                        append("\nOutputData: ${info.outputData.keyValueMap}")
-                    }
                     append("\nRunAttemptCount: ${info.runAttemptCount}")
-                    append("\nProgress: ${info.progress.keyValueMap}")
+                    if (info.state == androidx.work.WorkInfo.State.FAILED) {
+                        val err = info.outputData.getString("error")
+                        if (!err.isNullOrBlank()) append("\nПомилка: $err")
+                        else append("\nOutputData: ${info.outputData.keyValueMap}")
+                    }
+                    val progress = info.progress.keyValueMap
+                    if (progress.isNotEmpty()) append("\nProgress: $progress")
                 }
             }
         }

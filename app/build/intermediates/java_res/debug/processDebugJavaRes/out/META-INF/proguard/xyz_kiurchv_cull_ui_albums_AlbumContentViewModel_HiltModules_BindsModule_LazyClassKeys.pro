@@ -1,0 +1,1 @@
+-keep,allowobfuscation,allowshrinking class xyz.kiurchv.cull.ui.albums.AlbumContentViewModel
